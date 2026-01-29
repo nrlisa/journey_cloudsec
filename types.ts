@@ -1,6 +1,17 @@
 
 export type LabCategory = 'AWS' | 'Azure' | 'GCP' | 'Network' | 'AppSec' | 'Mandarin';
 
+export type ProjectStatus = 'Completed' | 'In Progress' | 'Planned';
+
+export interface Project {
+  id: string;
+  name: string;
+  skills: string;
+  status: ProjectStatus;
+  date: string; // Added date field
+  githubLink?: string;
+}
+
 export interface Lab {
   id: string;
   name: string;
@@ -33,7 +44,9 @@ export interface AppState {
   lastStreakUpdateDate: string | null;
   securityChecklist: ChecklistItem[];
   resourceVault: Resource[];
+  projects: Project[];
 }
 
 export const CATEGORIES: LabCategory[] = ['AWS', 'Azure', 'GCP', 'Network', 'AppSec', 'Mandarin'];
 export const RESOURCE_TYPES: Resource['type'][] = ['Course', 'Certification', 'Doc', 'Video'];
+export const PROJECT_STATUSES: ProjectStatus[] = ['Completed', 'In Progress', 'Planned'];

@@ -28,14 +28,20 @@ import {
   ChevronLeft,
   Search,
   Filter,
-  Sparkles
+  Sparkles,
+  Clock,
+  ExternalLink,
+  Kanban
 } from 'lucide-react';
-import { AppState, Lab, LabCategory, CATEGORIES, ChecklistItem, Resource, RESOURCE_TYPES } from './types';
+import { AppState, Lab, LabCategory, CATEGORIES, ChecklistItem, Resource, RESOURCE_TYPES, Project, ProjectStatus, PROJECT_STATUSES } from './types';
 import { applyDecay, updateStreak } from './utils/syncLogic';
 import { BentoCard } from './components/BentoCard';
 import { getDaysDiff } from './utils/dateUtils';
 
 const STORAGE_KEY = 'cloudsec_mastery_state';
+
+// Per user request, start with 0 projects
+const INITIAL_PROJECTS: Project[] = [];
 
 const INITIAL_STATE: AppState = {
   syncPercentage: 100,
@@ -46,13 +52,15 @@ const INITIAL_STATE: AppState = {
   streak: 0,
   lastStreakUpdateDate: null,
   securityChecklist: [],
-  resourceVault: []
+  resourceVault: [],
+  projects: INITIAL_PROJECTS
 };
 
 export default function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'vault'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<LabCategory | 'All'>('All');
+  const [showProjectForm, setShowProjectForm] = useState(false);
 
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -60,6 +68,7 @@ export default function App() {
       const parsed = JSON.parse(saved);
       if (!parsed.securityChecklist) parsed.securityChecklist = [];
       if (!parsed.resourceVault) parsed.resourceVault = [];
+      if (!parsed.projects) parsed.projects = INITIAL_PROJECTS;
       if (!parsed.journeyStartDate) parsed.journeyStartDate = new Date().toISOString();
       return parsed;
     }
@@ -76,6 +85,13 @@ export default function App() {
   const [resTitle, setResTitle] = useState('');
   const [resType, setResType] = useState<Resource['type']>('Course');
   const [resLink, setResLink] = useState('');
+
+  // Project Form State
+  const [projName, setProjName] = useState('');
+  const [projSkills, setProjSkills] = useState('');
+  const [projStatus, setProjStatus] = useState<ProjectStatus>('Planned');
+  const [projDate, setProjDate] = useState(new Date().toISOString().split('T')[0]);
+  const [projGithub, setProjGithub] = useState('');
 
   // Calculate Lab Debt
   const labDebt = useMemo(() => {
@@ -124,6 +140,39 @@ export default function App() {
     setGithubLink('');
   };
 
+  const handleAddProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!projName || !projSkills) return;
+
+    const newProject: Project = {
+      id: crypto.randomUUID(),
+      name: projName,
+      skills: projSkills,
+      status: projStatus,
+      date: projDate,
+      githubLink: projStatus === 'Completed' ? projGithub : undefined
+    };
+
+    setState(prev => ({
+      ...prev,
+      projects: [...prev.projects, newProject]
+    }));
+
+    setProjName('');
+    setProjSkills('');
+    setProjStatus('Planned');
+    setProjDate(new Date().toISOString().split('T')[0]);
+    setProjGithub('');
+    setShowProjectForm(false);
+  };
+
+  const deleteProject = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      projects: prev.projects.filter(p => p.id !== id)
+    }));
+  };
+
   const addResource = (e: React.FormEvent) => {
     e.preventDefault();
     if (!resTitle.trim()) return;
@@ -160,16 +209,6 @@ export default function App() {
     }));
   };
 
-  const getResourceIcon = (type: Resource['type']) => {
-    switch (type) {
-      case 'Course': return <GraduationCap className="w-4 h-4" />;
-      case 'Certification': return <ShieldCheck className="w-4 h-4" />;
-      case 'Video': return <PlayCircle className="w-4 h-4" />;
-      case 'Doc': return <FileText className="w-4 h-4" />;
-      default: return <BookOpen className="w-4 h-4" />;
-    }
-  };
-
   const getCategoryIcon = (cat: LabCategory) => {
     switch(cat) {
       case 'AWS':
@@ -203,8 +242,25 @@ export default function App() {
     });
   }, [state.labs, searchTerm, filterCategory]);
 
+  const getStatusStyle = (status: ProjectStatus) => {
+    switch (status) {
+      case 'Completed': return 'bg-blue-100 text-blue-600 border-blue-200';
+      case 'In Progress': return 'bg-pink-100 text-pink-600 border-pink-200';
+      default: return 'bg-slate-100 text-slate-500 border-slate-200';
+    }
+  };
+
+  const getStatusIcon = (status: ProjectStatus) => {
+    switch (status) {
+      case 'Completed': return <CheckCircle2 className="w-3 h-3" />;
+      case 'In Progress': return <Clock className="w-3 h-3" />;
+      default: return <Circle className="w-3 h-3" />;
+    }
+  };
+
   const renderDashboard = () => (
-    <main className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+    <main className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in fade-in duration-500 pb-20">
+      {/* 1. Sync Health */}
       <BentoCard title="SYSTEM SYNC HEALTH" icon={<Activity className="w-5 h-5" />} className="lg:row-span-1">
         <div className="flex flex-col items-center justify-center w-full h-full py-2 relative">
           {decayAmount > 0 && (
@@ -245,6 +301,94 @@ export default function App() {
         </div>
       </BentoCard>
 
+      {/* 2. Project Pipeline */}
+      <BentoCard title="SECURITY PROJECT PIPELINE" icon={<Kanban className="w-5 h-5" />} className="lg:col-span-2">
+        <div className="flex flex-col h-full space-y-4">
+          <div className="flex justify-between items-center shrink-0">
+             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Master Milestones</span>
+             <button 
+                onClick={() => setShowProjectForm(!showProjectForm)}
+                className="flex items-center gap-1 text-[10px] font-black text-blue-500 uppercase tracking-widest hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors"
+              >
+                <Plus className="w-3 h-3" /> Add New Project
+              </button>
+          </div>
+
+          {showProjectForm && (
+            <form onSubmit={handleAddProject} className="bg-white/60 border border-blue-100 rounded-2xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input 
+                  type="text" value={projName} onChange={e => setProjName(e.target.value)} placeholder="Project Name..."
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400 font-medium"
+                />
+                <input 
+                  type="text" value={projSkills} onChange={e => setProjSkills(e.target.value)} placeholder="Skills (e.g. IAM, VPC)..."
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400 font-medium"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <select 
+                  value={projStatus} onChange={e => setProjStatus(e.target.value as ProjectStatus)}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none font-medium"
+                >
+                  {PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input 
+                  type="date" value={projDate} onChange={e => setProjDate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none font-medium"
+                />
+                {projStatus === 'Completed' ? (
+                  <input 
+                    type="url" value={projGithub} onChange={e => setProjGithub(e.target.value)} placeholder="GitHub URL..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none font-medium"
+                  />
+                ) : (
+                  <div className="w-full bg-slate-50/50 border border-dashed border-slate-200 rounded-xl px-3 py-2 text-[10px] text-slate-300 flex items-center italic">Link available on completion</div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" className="flex-1 bg-pink-500 text-white rounded-xl py-2 font-bold text-xs hover:bg-pink-600 transition-all">CREATE PROJECT</button>
+                <button type="button" onClick={() => setShowProjectForm(false)} className="px-4 bg-slate-200 text-slate-600 rounded-xl py-2 font-bold text-xs hover:bg-slate-300 transition-all">CANCEL</button>
+              </div>
+            </form>
+          )}
+
+          <div className="overflow-y-auto max-h-[220px] space-y-2 pr-2 custom-scrollbar flex-1">
+            {state.projects.length === 0 ? (
+              <div className="text-center py-10 text-slate-300 font-mono text-[10px] uppercase border border-dashed border-slate-200 rounded-2xl">No projects in pipeline.</div>
+            ) : (
+              state.projects.map(project => (
+                <div key={project.id} className="group flex items-center justify-between bg-white/50 border border-white/60 p-3 rounded-2xl hover:bg-white transition-all">
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-black text-slate-800 text-sm leading-tight truncate">{project.name}</h4>
+                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase border flex items-center gap-1 ${getStatusStyle(project.status)}`}>
+                        {getStatusIcon(project.status)} {project.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase">{new Date(project.date).toLocaleDateString()}</span>
+                      <p className="text-[10px] font-medium text-slate-400 truncate">Skills: {project.skills}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {project.status === 'Completed' && project.githubLink && (
+                      <a href={project.githubLink} target="_blank" rel="noopener noreferrer" className="p-2 bg-blue-50 text-blue-500 rounded-xl hover:bg-blue-100 transition-all" title="View Repository">
+                        <Github className="w-4 h-4" />
+                      </a>
+                    )}
+                    <button onClick={() => deleteProject(project.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-400 transition-all">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </BentoCard>
+
+      {/* 3. Resource Tracker */}
       <BentoCard title="RESOURCE TRACKER" icon={<BookOpen className="w-5 h-5" />} className="lg:col-span-1">
         <div className="flex flex-col h-full space-y-4">
           <div className="space-y-1">
@@ -275,6 +419,7 @@ export default function App() {
         </div>
       </BentoCard>
 
+      {/* 4. Maintenance Mode */}
       <BentoCard title="MAINTENANCE PROTOCOL" icon={<Cpu className="w-5 h-5" />}>
           <div className="flex flex-col justify-between h-full gap-4">
             <p className="text-xs text-slate-500 leading-relaxed font-medium">Exam mode pauses the daily sync decay protocol.</p>
@@ -290,6 +435,7 @@ export default function App() {
           </div>
       </BentoCard>
 
+      {/* 5. Add Lab Form */}
       <BentoCard title="DECRYPT NEW LAB" icon={<Terminal className="w-5 h-5" />} className="lg:col-span-1">
         <form onSubmit={handleLogLab} className="space-y-4">
           <input 
@@ -314,6 +460,7 @@ export default function App() {
         </form>
       </BentoCard>
 
+      {/* 6. Recent Labs */}
       <BentoCard title="LATEST DEPLOYMENTS" icon={<History className="w-5 h-5" />} className="lg:col-span-2 overflow-hidden flex flex-col">
         <div className="flex justify-between items-center mb-4 shrink-0">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing 7 Recent Sessions</span>
@@ -352,7 +499,7 @@ export default function App() {
   );
 
   const renderVault = () => (
-    <div className="animate-in slide-in-from-bottom-4 fade-in duration-500">
+    <div className="animate-in slide-in-from-bottom-4 fade-in duration-500 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
         <button 
           onClick={() => setCurrentView('dashboard')}
