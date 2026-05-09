@@ -1,5 +1,6 @@
 {
   "name": "Cloud Security Mastery Dashboard",
   "description": "A focused cloud security learning tracker with a system sync mechanic, decay logic, and pastel synthwave bento-box aesthetic.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": []
 }
